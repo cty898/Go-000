@@ -1,13 +1,12 @@
 package main
 
 import (
+	"context"
 	"errors"
 	"fmt"
-	"log"
 	"os"
 	"os/signal"
 	"syscall"
-	"time"
 
 	"golang.org/x/sync/errgroup"
 )
@@ -15,37 +14,44 @@ import (
 //1. 基于 errgroup 实现一个 http server 的启动和关闭 ，以及 linux signal 信号的注册和处理，要保证能够一个退出，全部注销退出。
 
 func main() {
-	var g errgroup.Group
+	g, ctx := errgroup.WithContext(context.Background())
 
-	// 等待中断信号
-	quit := make(chan os.Signal)
-	// 接收 syscall.SIGINT 和 syscall.SIGTERM 信号
-	signal.Notify(quit, syscall.SIGINT, syscall.SIGTERM)
-	<-quit
-	log.Println("Shuting down server...")
-	// 启动第一个子任务,它执行成功
+	// 启动 http 服务
 	g.Go(func() error {
-		time.Sleep(5 * time.Second)
-		fmt.Println("exec #1")
-		return nil
+		fmt.Println("http server start")
+		for {
+			select {
+			case <-ctx.Done():
+				fmt.Println("http server stop")
+				return ctx.Err()
+			}
+		}
 	})
-	// 启动第二个子任务，它执行失败
+	// 启动第一个子任务
 	g.Go(func() error {
-		time.Sleep(10 * time.Second)
-		fmt.Println("exec #2")
-		return errors.New("failed to exec #2")
+		fmt.Println("task 1 start")
+		for {
+			select {
+			case <-ctx.Done():
+				fmt.Println("task 1 stop")
+				return ctx.Err()
+			}
+		}
 	})
 
-	// 启动第三个子任务，它执行成功
+	// 启动第二个子任务等待信号
 	g.Go(func() error {
-		time.Sleep(15 * time.Second)
-		fmt.Println("exec #3")
-		return nil
+		fmt.Println("task 2 start")
+		// 等待中断信号
+		quit := make(chan os.Signal)
+		// 接收 syscall.SIGINT 和 syscall.SIGTERM 信号
+		signal.Notify(quit, syscall.SIGINT, syscall.SIGTERM)
+		<-quit
+
+		return errors.New("Shuting down server")
 	})
-	// 等待三个任务都完成
-	if err := g.Wait(); err == nil {
-		fmt.Println("Successfully exec all")
-	} else {
-		fmt.Println("failed:", err)
+
+	if err := g.Wait(); err != nil {
+		fmt.Println(err)
 	}
 }
