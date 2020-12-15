@@ -15,8 +15,15 @@ import (
 	"github.com/cty898/Go-000/Week04/user/endpoint"
 	"github.com/cty898/Go-000/Week04/user/redis"
 	"github.com/cty898/Go-000/Week04/user/service"
-	"github.com/cty898/Go-000/Week04/user/transport"
 )
+
+func NewUserEndpoints(userService service.UserService) *endpoint.UserEndpoints {
+	userEndpoints := &endpoint.UserEndpoints{
+		RegisterEndpoint: endpoint.MakeRegisterEndpoint(userService),
+		LoginEndpoint:    endpoint.MakeLoginEndpoint(userService),
+	}
+	return userEndpoints
+}
 
 func main() {
 
@@ -50,14 +57,8 @@ func main() {
 		log.Fatal(err)
 	}
 
-	userService := service.MakeUserServiceImpl(&dao.UserDAOImpl{})
-
-	userEndpoints := &endpoint.UserEndpoints{
-		endpoint.MakeRegisterEndpoint(userService),
-		endpoint.MakeLoginEndpoint(userService),
-	}
-
-	r := transport.MakeHttpHandler(ctx, userEndpoints)
+	//使用 Wire 构建依赖
+	r := InitHttpHandler(&dao.UserDAOImpl{}, ctx)
 
 	go func() {
 		errChan <- http.ListenAndServe(":"+strconv.Itoa(*servicePort), r)
